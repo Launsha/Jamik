@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jadwal Sholat Banten</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #121212;
+            color: #e0e0e0;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            width: 90%;
+            max-width: 800px;
+            background-color: #1e1e1e;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+        }
+        header {
+            text-align: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #333;
+        }
+        h1 {
+            color: #4CAF50;
+            margin-bottom: 5px;
+        }
+        .date-display {
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+        }
+        .prayer-times {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .prayer-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 15px;
+            background-color: #2a2a2a;
+            border-radius: 6px;
+            transition: background-color 0.3s;
+        }
+        .prayer-row:hover {
+            background-color: #333;
+        }
+        .next-prayer {
+            background-color: #1e3a2d;
+            border-left: 4px solid #4CAF50;
+        }
+        .prayer-name {
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        .prayer-time {
+            font-family: monospace;
+            font-size: 1.1rem;
+        }
+        .location-selector {
+            margin: 20px 0;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+        select {
+            padding: 8px;
+            background-color: #333;
+            color: #e0e0e0;
+            border: 1px solid #444;
+            border-radius: 4px;
+            outline: none;
+        }
+        footer {
+            margin-top: 30px;
+            text-align: center;
+            font-size: 0.85rem;
+            color: #888;
+        }
+        .countdown {
+            text-align: center;
+            font-size: 1.3rem;
+            margin: 15px 0;
+            padding: 12px;
+            background-color: #2a2a2a;
+            border-radius: 6px;
+        }
+        .countdown-time {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Jadwal Sholat Banten</h1>
+            <div class="date-display" id="current-date"></div>
+        </header>
+        
+        <div class="location-selector">
+            <select id="city-selector" onchange="updateCity()">
+                <option value="serang">Serang</option>
+                <option value="cilegon">Cilegon</option>
+                <option value="tangerang">Tangerang</option>
+                <option value="pandeglang">Pandeglang</option>
+                <option value="lebak">Lebak</option>
+            </select>
+        </div>
+        
+        <div class="countdown" id="countdown">
+            Waktu tersisa menuju <span id="next-prayer-name">-</span>: 
+            <span class="countdown-time" id="countdown-time">-</span>
+        </div>
+        
+        <div class="prayer-times" id="prayer-times">
+            <!-- Prayer times will be filled by JavaScript -->
+        </div>
+        
+        <footer>
+            <p>Sumber data: API MyQuran.com</p>
+            <p>Waktu terakhir diperbarui: <span id="last-updated">-</span></p>
+        </footer>
+    </div>
+
+    <script>
+        // Konfigurasi Kota di Banten dengan ID Kota dari API MyQuran
+        const cities = {
+            'serang': 1511,      // Serang
+            'cilegon': 1511,     // Cilegon (menggunakan ID Serang karena perbedaan waktu minimal)
+            'tangerang': 1508,   // Tangerang
+            'pandeglang': 1501,  // Pandeglang
+            'lebak': 1502,       // Lebak
+        };
+        
+        // Data waktu sholat (akan diisi dari API)
+        let prayerTimes = {};
+        let currentCity = 'serang';
+        
+        // Format tanggal Indonesia
+        function formatDate(date) {
+            const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+            return date.toLocaleDateString('id-ID', options);
+        }
+        
+        // Format waktu 24 jam
+        function formatTime(timeStr) {
+            return timeStr;
+        }
+        
+        // Menghitung waktu tersisa hingga waktu sholat berikutnya
+        function calculateTimeRemaining(targetTime) {
+            const now = new Date();
+            const [hours, minutes] = targetTime.split(':').map(Number);
+            const target = new Date();
+            target.setHours(hours, minutes, 0);
+            
+            if (target < now) {
+                target.setDate(target.getDate() + 1);
+            }
+            
+            const diff = target - now;
+            const hours_remaining = Math.floor(diff / (1000 * 60 * 60));
+            const minutes_remaining = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds_remaining = Math.floor((diff % (1000 * 60)) / 1000);
+            
+            return `${hours_remaining.toString().padStart(2, '0')}:${minutes_remaining.toString().padStart(2, '0')}:${seconds_remaining.toString().padStart(2, '0')}`;
+        }
+        
+        // Menentukan waktu sholat selanjutnya
+        function getNextPrayer() {
+            const now = new Date();
+            const currentTime = now.getHours() * 60 + now.getMinutes();
+            
+            const prayers = [
+                { name: 'Subuh', time: prayerTimes.subuh },
+                { name: 'Dzuhur', time: prayerTimes.dzuhur },
+                { name: 'Ashar', time: prayerTimes.ashar },
+                { name: 'Maghrib', time: prayerTimes.maghrib },
+                { name: 'Isya', time: prayerTimes.isya }
+            ];
+            
+            for (const prayer of prayers) {
+                if (!prayer.time) continue;
+                
+                const [hours, minutes] = prayer.time.split(':').map(Number);
+                const prayerTime = hours * 60 + minutes;
+                
+                if (prayerTime > currentTime) {
+                    return prayer;
+                }
+            }
+            
+            // Jika semua waktu sholat hari ini sudah lewat, kembalikan Subuh untuk hari berikutnya
+            return { name: 'Subuh (besok)', time: prayerTimes.subuh };
+        }
+        
+        // Update tampilan jadwal sholat
+        function updatePrayerTimes() {
+            const prayerTimesElement = document.getElementById('prayer-times');
+            prayerTimesElement.innerHTML = '';
+            
+            const prayers = [
+                { id: 'subuh', name: 'Subuh' },
+                { id: 'terbit', name: 'Terbit' },
+                { id: 'dzuhur', name: 'Dzuhur' },
+                { id: 'ashar', name: 'Ashar' },
+                { id: 'maghrib', name: 'Maghrib' },
+                { id: 'isya', name: 'Isya' }
+            ];
+            
+            const nextPrayer = getNextPrayer();
+            
+            prayers.forEach(prayer => {
+                if (prayerTimes[prayer.id]) {
+                    const isNext = nextPrayer.name === prayer.name;
+                    const prayerRow = document.createElement('div');
+                    prayerRow.className = `prayer-row ${isNext ? 'next-prayer' : ''}`;
+                    
+                    prayerRow.innerHTML = `
+                        <div class="prayer-name">${prayer.name}</div>
+                        <div class="prayer-time">${formatTime(prayerTimes[prayer.id])}</div>
+                    `;
+                    
+                    prayerTimesElement.appendChild(prayerRow);
+                }
+            });
+            
+            // Update hitung mundur
+            updateCountdown();
+        }
+        
+        // Update hitung mundur
+        function updateCountdown() {
+            const nextPrayer = getNextPrayer();
+            
+            document.getElementById('next-prayer-name').textContent = nextPrayer.name;
+            document.getElementById('countdown-time').textContent = calculateTimeRemaining(nextPrayer.time);
+        }
+        
+        // Ambil jadwal sholat dari API
+        async function fetchPrayerTimes(cityId) {
+            try {
+                const today = new Date();
+                const year = today.getFullYear();
+                const month = today.getMonth() + 1;
+                const day = today.getDate();
+                
+                const url = `https://api.myquran.com/v1/sholat/jadwal/${cityId}/${year}/${month}/${day}`;
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (data.status && data.data && data.data.jadwal) {
+                    prayerTimes = {
+                        subuh: data.data.jadwal.subuh,
+                        terbit: data.data.jadwal.terbit,
+                        dzuhur: data.data.jadwal.dzuhur,
+                        ashar: data.data.jadwal.ashar,
+                        maghrib: data.data.jadwal.maghrib,
+                        isya: data.data.jadwal.isya
+                    };
+                    
+                    document.getElementById('current-date').textContent = formatDate(today);
+                    document.getElementById('last-updated').textContent = new Date().toLocaleTimeString('id-ID');
+                    
+                    updatePrayerTimes();
+                    
+                    // Mulai interval untuk countdown
+                    setInterval(updateCountdown, 1000);
+                }
+            } catch (error) {
+                console.error('Error fetching prayer times:', error);
+            }
+        }
+        
+        // Update kota
+        function updateCity() {
+            const citySelector = document.getElementById('city-selector');
+            currentCity = citySelector.value;
+            fetchPrayerTimes(cities[currentCity]);
+        }
+        
+        // Inisialisasi
+        document.addEventListener('DOMContentLoaded', () => {
+            updateCity();
+        });
+    </script>
+</body>
+</html>
